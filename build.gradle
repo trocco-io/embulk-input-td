@@ -1,42 +1,63 @@
 plugins {
-    id "com.jfrog.bintray" version "1.1"
-    id "com.github.jruby-gradle.base" version "0.1.5"
     id "java"
     id "checkstyle"
-    id "findbugs"
     id "jacoco"
     id "pmd"
+    id "org.embulk.embulk-plugins" version "0.7.0"
+    id "com.palantir.git-version" version "3.1.0"
+    id "com.diffplug.spotless" version "5.15.0"
 }
-import com.github.jrubygradle.JRubyExec
+
 repositories {
     mavenCentral()
-    jcenter()
 }
+
+group = "trocco-io"
+version = {
+    def vd = versionDetails()
+    if (vd.commitDistance == 0 && vd.lastTag ==~ /^v?[0-9]+\.[0-9]+\.[0-9]+([.-][.a-zA-Z0-9-]+)?/) {
+        vd.lastTag.replaceFirst(/^v/, "")
+    } else {
+        "0.0.0.${vd.gitHash}"
+    }
+}()
+description = "Loads records from Td."
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}
+
 configurations {
-    provided
+    compileClasspath.resolutionStrategy.activateDependencyLocking()
+    runtimeClasspath.resolutionStrategy.activateDependencyLocking()
 }
-
-version = "0.2.3"
-
-sourceCompatibility = 1.8
-targetCompatibility = 1.8
 
 dependencies {
-    compile  "org.embulk:embulk-core:0.9.18"
-    provided "org.embulk:embulk-core:0.9.18"
-    compile  "org.embulk:embulk-standards:0.9.18"
-    provided "org.embulk:embulk-standards:0.9.18"
-    compile  "com.treasuredata.client:td-client:0.9.0"
-
-    testCompile "junit:junit:4.+"
+    def embulkVersion = "0.10.42"
+    compileOnly("org.embulk:embulk-api:${embulkVersion}")
+    compileOnly("org.embulk:embulk-spi:${embulkVersion}")
+    implementation "org.embulk:embulk-util-config:0.3.4"
+    implementation  "com.treasuredata.client:td-client:0.9.0"
 }
 
-task classpath(type: Copy, dependsOn: ["jar"]) {
-    doFirst { file("classpath").deleteDir() }
-    from (configurations.runtime - configurations.provided + files(jar.archivePath))
-    into "classpath"
+tasks.withType(JavaCompile).configureEach {
+    options.compilerArgs << "-Xlint:all" << "-Xlint:-serial"
 }
-clean { delete "classpath" }
+
+embulkPlugin {
+    mainClass = "org.embulk.input.td.TdInputPlugin"
+    category = "input"
+    type = "td"
+}
+
+gem {
+    authors = ["Muga Nishizawa"]
+    email = ["muga.nishizawa@gmail.com"]
+    summary = "Td input plugin for Embulk"
+    homepage = "https://github.com/trocco-io/embulk-input-td"
+    licenses = ["MIT"]
+}
 
 def checkstyleConfigDir = new File(rootDir, "/config/checkstyle")
 checkstyle {
@@ -51,19 +72,6 @@ task checkstyle(type: Checkstyle) {
 }
 check.dependsOn('checkstyle')
 
-tasks.withType(FindBugs) {
-    reports {
-        xml.enabled = false
-        html.enabled = true
-    }
-}
-findbugs {
-    toolVersion = "3.0.1"
-    effort = 'max'
-    reportLevel = 'high'
-    ignoreFailures = false
-}
-
 // PMD
 pmd {
     ignoreFailures = false
@@ -71,52 +79,16 @@ pmd {
 
 jacocoTestReport {
     reports {
-        xml.enabled = true // coveralls plugin depends on xml format report
-        html.enabled = true
+        xml.required = true // coveralls plugin depends on xml format report
+        html.required = true
     }
 }
 
-task gem(type: JRubyExec, dependsOn: ["gemspec", "classpath"]) {
-    jrubyArgs "-rrubygems/gem_runner", "-eGem::GemRunner.new.run(ARGV)", "build"
-    script "${project.name}.gemspec"
-    doLast { ant.move(file: "${project.name}-${project.version}.gem", todir: "pkg") }
-}
-
-task gemPush(type: JRubyExec, dependsOn: ["gem"]) {
-    jrubyArgs "-rrubygems/gem_runner", "-eGem::GemRunner.new.run(ARGV)", "push"
-    script "pkg/${project.name}-${project.version}.gem"
-}
-
-task "package"(dependsOn: ["gemspec", "classpath"]) {
-    doLast {
-        println "> Build succeeded."
-        println "> You can run embulk with '-L ${file(".").absolutePath}' argument."
+spotless {
+    java {
+        importOrder()
+        removeUnusedImports()
+        // googleJavaFormat()
+        toggleOffOn()
     }
 }
-
-task gemspec {
-    ext.gemspecFile = file("${project.name}.gemspec")
-    inputs.file "build.gradle"
-    outputs.file gemspecFile
-    doLast { gemspecFile.write($/
-Gem::Specification.new do |spec|
-  spec.name          = "${project.name}"
-  spec.version       = "${project.version}"
-  spec.authors       = ["Muga Nishizawa"]
-  spec.summary       = %[Td input plugin for Embulk]
-  spec.description   = %[Loads records from Td.]
-  spec.email         = ["muga.nishizawa@gmail.com"]
-  spec.licenses      = ["Apache 2.0"]
-  spec.homepage      = "https://github.com/muga/embulk-input-td"
-
-  spec.files         = `git ls-files`.split("\n") + Dir["classpath/*.jar"]
-  spec.test_files    = spec.files.grep(%r"^(test|spec)/")
-  spec.require_paths = ["lib"]
-
-  spec.add_development_dependency 'bundler', ['~> 1.0']
-  spec.add_development_dependency 'rake', ['>= 10.0']
-end
-/$)
-    }
-}
-clean { delete "${project.name}.gemspec" }
