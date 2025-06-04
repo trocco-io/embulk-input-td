@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.google.common.base.Function;
-import com.google.common.base.Optional;
 import com.google.common.base.Throwables;
 import com.google.inject.Inject;
 import com.treasuredata.client.ProxyConfig;
@@ -18,6 +17,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.zip.GZIPInputStream;
 import org.embulk.config.ConfigDiff;
@@ -83,7 +83,7 @@ public class TdInputPlugin
         try (final TDClient client = newTdClient(task)) {
             final TDJob job = getTdJob(task, client);
 
-            final Optional<String> jobResultSchema = job.getResultSchema();
+            final com.google.common.base.Optional<String> jobResultSchema = job.getResultSchema();
             if (!jobResultSchema.isPresent()) {
                 throw new ConfigException(String.format(
                         "Not found result schema of job %s", job.getJobId()));
@@ -131,19 +131,19 @@ public class TdInputPlugin
             final String host = props.getProperty(hostKey);
             final String defaultPort = !useSsl ? "80" : "443";
             final int port = Integer.parseInt(props.getProperty(portKey, defaultPort));
-            final Optional<String> user = Optional.fromNullable(props.getProperty(userKey));
-            final Optional<String> password = Optional.fromNullable(props.getProperty(passwordKey));
+            final com.google.common.base.Optional<String> user = com.google.common.base.Optional.fromNullable(props.getProperty(userKey));
+            final com.google.common.base.Optional<String> password = com.google.common.base.Optional.fromNullable(props.getProperty(passwordKey));
             return Optional.of(new ProxyConfig(host, port, useSsl, user, password));
         } else if (task.isPresent()) {
             final HttpProxyTask proxyTask = task.get();
             final String host = proxyTask.getHost();
             final int port = proxyTask.getPort();
             final boolean useSsl = proxyTask.getUseSsl();
-            final Optional<String> user = proxyTask.getUser();
-            final Optional<String> password = proxyTask.getPassword();
+            final com.google.common.base.Optional<String> user = com.google.common.base.Optional.fromNullable(proxyTask.getUser().orElse(null));
+            final com.google.common.base.Optional<String> password = com.google.common.base.Optional.fromNullable(proxyTask.getPassword().orElse(null));
             return Optional.of(new ProxyConfig(host, port, useSsl, user, password));
         } else {
-            return Optional.absent();
+            return Optional.empty();
         }
     }
 
