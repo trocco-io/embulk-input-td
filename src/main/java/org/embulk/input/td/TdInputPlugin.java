@@ -20,13 +20,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Properties;
 import java.util.zip.GZIPInputStream;
-import org.embulk.config.Config;
-import org.embulk.config.ConfigDefault;
 import org.embulk.config.ConfigDiff;
 import org.embulk.config.ConfigException;
-import org.embulk.config.ConfigInject;
 import org.embulk.config.ConfigSource;
-import org.embulk.config.Task;
 import org.embulk.config.TaskReport;
 import org.embulk.config.TaskSource;
 import org.embulk.input.td.writer.BooleanValueWriter;
@@ -46,20 +42,28 @@ import org.embulk.spi.PageOutput;
 import org.embulk.spi.Schema;
 import org.embulk.spi.type.Type;
 import org.embulk.spi.type.Types;
+import org.embulk.util.config.Config;
+import org.embulk.util.config.ConfigDefault;
+import org.embulk.util.config.ConfigMapper;
+import org.embulk.util.config.ConfigMapperFactory;
+import org.embulk.util.config.Task;
+import org.embulk.util.config.TaskMapper;
 import org.msgpack.core.MessagePack;
 import org.msgpack.core.MessageUnpacker;
 import org.msgpack.value.ArrayValue;
 import org.msgpack.value.Value;
 import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class TdInputPlugin
         implements InputPlugin {
 
+    private static final ConfigMapperFactory CONFIG_MAPPER_FACTORY = ConfigMapperFactory.builder().addDefaultModules().build();
     private final Logger log;
 
     @Inject
     public TdInputPlugin() {
-        this.log = Exec.getLogger(this.getClass());
+        this.log = LoggerFactory.getLogger(this.getClass());
     }
 
     private static JsonNode toJsonNode(final String schema) {
@@ -73,7 +77,9 @@ public class TdInputPlugin
 
     @Override
     public ConfigDiff transaction(final ConfigSource config, final InputPlugin.Control control) {
-        final PluginTask task = config.loadConfig(PluginTask.class);
+        ConfigMapper configMapper = CONFIG_MAPPER_FACTORY.createConfigMapper();
+        PluginTask task = configMapper.map(config, PluginTask.class);
+
         try (final TDClient client = newTdClient(task)) {
             final TDJob job = getTdJob(task, client);
 
@@ -333,8 +339,9 @@ public class TdInputPlugin
             final Schema schema,
             final int taskIndex,
             final PageOutput output) {
-        final PluginTask task = taskSource.loadTask(PluginTask.class);
-        final BufferAllocator allocator = task.getBufferAllocator();
+        final TaskMapper taskMapper = CONFIG_MAPPER_FACTORY.createTaskMapper();
+        final PluginTask task = taskMapper.map(taskSource, PluginTask.class);
+        final BufferAllocator allocator = Exec.getBufferAllocator();
         final ValueWriter[] writers = newValueWriters(schema);
         final String jobId = taskSource.get(String.class, "job_id");
         final boolean stopOnInvalidRecord = task.getStopOnInvalidRecord();
@@ -469,9 +476,6 @@ public class TdInputPlugin
         public boolean getStopOnInvalidRecord();
 
         // TODO column_options
-
-        @ConfigInject
-        BufferAllocator getBufferAllocator();
     }
 
     public interface HttpProxyTask
