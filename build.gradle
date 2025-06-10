@@ -3,9 +3,11 @@ plugins {
     id "checkstyle"
     id "jacoco"
     id "pmd"
+    id "maven-publish"
     id "org.embulk.embulk-plugins" version "0.7.0"
     id "com.palantir.git-version" version "3.1.0"
     id "com.diffplug.spotless" version "5.15.0"
+    id "com.github.johnrengelman.shadow" version "6.1.0" apply false
 }
 
 repositories {
@@ -38,7 +40,10 @@ dependencies {
     compileOnly("org.embulk:embulk-api:${embulkVersion}")
     compileOnly("org.embulk:embulk-spi:${embulkVersion}")
     implementation "org.embulk:embulk-util-config:0.3.4"
-    implementation  "com.treasuredata.client:td-client:0.9.0"
+    implementation "com.google.guava:guava:33.4.8-jre"
+    implementation "com.google.inject:guice:7.0.0"
+
+    implementation project(path: ":shadow-td-client", configuration: "shadow")
 }
 
 tasks.withType(JavaCompile).configureEach {
@@ -92,3 +97,9 @@ spotless {
         toggleOffOn()
     }
 }
+
+// Workaround for IntelliJ issue
+// https://youtrack.jetbrains.com/issue/IDEA-163411
+// https://github.com/johnrengelman/shadow/issues/264#issuecomment-814402906
+compileJava.dependsOn(tasks.getByPath(":shadow-td-client:publishToMavenLocal"))
+

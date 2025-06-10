@@ -1,0 +1,38 @@
+plugins {
+    id "java"
+    id "maven-publish"
+    id "com.github.johnrengelman.shadow"
+}
+
+repositories {
+    mavenCentral()
+}
+
+group = "${rootProject.group}"
+version = "${rootProject.version}"
+
+sourceCompatibility = 1.8
+targetCompatibility = 1.8
+
+configurations {
+    runtimeClasspath {
+        resolutionStrategy.activateDependencyLocking()
+    }
+    shadow {
+        resolutionStrategy.activateDependencyLocking()
+        transitive = false
+    }
+}
+
+dependencies {
+    implementation "com.treasuredata.client:td-client:1.1.3"
+}
+
+shadowJar {
+    relocate "com.fasterxml.jackson.core:jackson-annotations", "embulk.td.com.fasterxml.jackson.core:jackson-annotations"
+    relocate "com.fasterxml.jackson.core:jackson-core", "embulk.td.com.fasterxml.jackson.core:jackson-core"
+    relocate "com.fasterxml.jackson.core:jackson-databind", "embulk.td.com.fasterxml.jackson.core:jackson-databind"
+    relocate "com.fasterxml.jackson.datatype:jackson-datatype-guava", "embulk.td.com.fasterxml.jackson.datatype:jackson-datatype-guava"
+    relocate "com.fasterxml.jackson.datatype:jackson-datatype-jdk8", "embulk.td.com.fasterxml.jackson.datatype:jackson-datatype-jdk8"
+    relocate "com.fasterxml.jackson.datatype:jackson-datatype-joda", "embulk.td.com.fasterxml.jackson.datatype:jackson-datatype-joda"
+}
