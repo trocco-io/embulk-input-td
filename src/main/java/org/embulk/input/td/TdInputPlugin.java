@@ -83,7 +83,7 @@ public class TdInputPlugin
         try (final TDClient client = newTdClient(task)) {
             final TDJob job = getTdJob(task, client);
 
-            final com.google.common.base.Optional<String> jobResultSchema = job.getResultSchema();
+            final Optional<String> jobResultSchema = job.getResultSchema();
             if (!jobResultSchema.isPresent()) {
                 throw new ConfigException(String.format(
                         "Not found result schema of job %s", job.getJobId()));
@@ -131,16 +131,16 @@ public class TdInputPlugin
             final String host = props.getProperty(hostKey);
             final String defaultPort = !useSsl ? "80" : "443";
             final int port = Integer.parseInt(props.getProperty(portKey, defaultPort));
-            final com.google.common.base.Optional<String> user = com.google.common.base.Optional.fromNullable(props.getProperty(userKey));
-            final com.google.common.base.Optional<String> password = com.google.common.base.Optional.fromNullable(props.getProperty(passwordKey));
+            final Optional<String> user = Optional.ofNullable(props.getProperty(userKey));
+            final Optional<String> password = Optional.ofNullable(props.getProperty(passwordKey));
             return Optional.of(new ProxyConfig(host, port, useSsl, user, password));
         } else if (task.isPresent()) {
             final HttpProxyTask proxyTask = task.get();
             final String host = proxyTask.getHost();
             final int port = proxyTask.getPort();
             final boolean useSsl = proxyTask.getUseSsl();
-            final com.google.common.base.Optional<String> user = com.google.common.base.Optional.fromNullable(proxyTask.getUser().orElse(null));
-            final com.google.common.base.Optional<String> password = com.google.common.base.Optional.fromNullable(proxyTask.getPassword().orElse(null));
+            final Optional<String> user = proxyTask.getUser();
+            final Optional<String> password = proxyTask.getPassword();
             return Optional.of(new ProxyConfig(host, port, useSsl, user, password));
         } else {
             return Optional.empty();
