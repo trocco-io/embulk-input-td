@@ -407,6 +407,7 @@ public class TDHttpClient
         else {
             if (executionCount == 0) {
                 // First attempt
+                logger.info("Starting API request to: {}", context.apiRequest.getPath());
                 context.backoff.incrementExecutionCount();
             }
             else {
@@ -423,14 +424,19 @@ public class TDHttpClient
                 // Apply request customization
                 request = handler.prepareRequest(request);
 
+                logger.debug("Sending HTTP request to: {} with method: {}", request.url(), request.method());
+
                 // Get response
                 try (Response response = handler.send(httpClient, request)) {
                     int code = response.code();
+                    logger.debug("Received HTTP response: {} for request: {}", code, context.apiRequest.getPath());
+                    
                     // Retry upon proxy authentication request
                     // This is a workaround for this issue: https://github.com/square/okhttp/issues/3111
                     if (code == HttpStatus.TEMPORARY_REDIRECT_307 || code == 308) {
                         String location = response.header(LOCATION);
                         if (location != null) {
+                            logger.debug("Redirecting to: {}", location);
                             context = context.withTDApiRequest(context.apiRequest.withUri(location));
                             return submitRequest(context, handler);
                         }
@@ -444,6 +450,7 @@ public class TDHttpClient
                     }
                     else {
                         // This may directly throw an TDClientException if we know this is unrecoverable error.
+                        logger.debug("HTTP response indicates error, resolving error for: {}", context.apiRequest.getPath());
                         context = context.withRootCause(handler.resolveHttpResponseError(responseContext));
                     }
                 }
@@ -453,6 +460,7 @@ public class TDHttpClient
                 if (!TDClientHttpException.class.isAssignableFrom(e.getClass())) {
                     logger.warn(String.format("API request to %s failed: %s, cause: %s", context.apiRequest.getPath(), e.getClass(), e.getCause() == null ? e.getMessage() : e.getCause().getClass()), e);
                 }
+                logger.debug("Exception occurred during request to: {}, exception type: {}", context.apiRequest.getPath(), e.getClass().getSimpleName());
                 // This may throw TDClientException if the error is not recoverable
                 context = context.withRootCause(handler.resolveError(e));
             }

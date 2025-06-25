@@ -756,12 +756,24 @@ public class TDClient
     public <Result> Result jobResult(String jobId, TDResultFormat format, boolean includeHeader, Function<InputStream, Result> resultStreamHandler)
             throws TDClientException
     {
+        logger.info("Starting jobResult request for jobId: {}, format: {}, includeHeader: {}", jobId, format.getName(), includeHeader);
+        
         TDApiRequest request = TDApiRequest.Builder
                 .GET(buildUrl("/v3/job/result", jobId))
                 .addQueryParam("format", format.getName())
                 .addQueryParam("header", Boolean.toString(includeHeader))
                 .build();
-        return httpClient.<Result>call(request, apiKeyCache, resultStreamHandler);
+        
+        try {
+            logger.info("Calling httpClient for jobResult with request path: {}", request.getPath());
+            Result result = httpClient.<Result>call(request, apiKeyCache, resultStreamHandler);
+            logger.info("Successfully completed jobResult request for jobId: {}", jobId);
+            return result;
+        }
+        catch (Exception e) {
+            logger.error("Failed to get jobResult for jobId: {}, error: {}", jobId, e.getMessage(), e);
+            throw e;
+        }
     }
 
     @Override

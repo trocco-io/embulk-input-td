@@ -205,6 +205,8 @@ public class TDRequestErrorHandler
         else if (e instanceof StreamResetException) {
             // okhttp 4.10.0 will throw 429 Too Many Requests and defaultHttpResponseErrorResolver will handle
             // just retry after 1 secs but we could consider increasing it
+            logger.warn("StreamResetException detected: {}, treating as retryable error", e.getMessage());
+            logger.warn("StreamResetException details", e);
             Date retryAfter = new Date(System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(1));
             return new TDClientHttpTooManyRequestsException(e.getMessage(), retryAfter);
         }

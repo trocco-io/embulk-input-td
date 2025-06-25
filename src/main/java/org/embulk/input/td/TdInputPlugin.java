@@ -349,6 +349,10 @@ public class TdInputPlugin
         try (final PageBuilder pageBuilder = new PageBuilder(allocator, schema, output);
              final TDClient client = newTdClient(task)) {
             final TDResultFormat resultFormat = TDResultFormat.MESSAGE_PACK_GZ;
+            
+            log.info("Starting to fetch job result for job ID: {}", jobId);
+            log.info("Using result format: {}", resultFormat);
+            
             client.jobResult(jobId, resultFormat, new Function<InputStream, Void>() {
                 @Override
                 public Void apply(InputStream input) {
