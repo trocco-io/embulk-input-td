@@ -15,6 +15,9 @@ import com.treasuredata.client.model.TDJobSummary;
 import com.treasuredata.client.model.TDResultFormat;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -349,55 +352,81 @@ public class TdInputPlugin
         try (final PageBuilder pageBuilder = new PageBuilder(allocator, schema, output);
              final TDClient client = newTdClient(task)) {
             final TDResultFormat resultFormat = TDResultFormat.MESSAGE_PACK_GZ;
-            client.jobResult(jobId, resultFormat, new Function<InputStream, Void>() {
-                @Override
-                public Void apply(InputStream input) {
-                    try (final MessageUnpacker unpacker = MessagePack
-                            .newDefaultUnpacker(new GZIPInputStream(input))) {
-                        while (unpacker.hasNext()) {
-                            try {
-                                final Value v;
-                                try {
-                                    v = unpacker.unpackValue();
-                                } catch (IOException e) {
-                                    throw new InvalidRecordException("Cannot unpack value", e);
-                                }
 
-                                if (!v.isArrayValue()) {
-                                    throw new InvalidRecordException(
-                                            String.format(Locale.ENGLISH,
-                                                    "Must be array value: (%s)", v.toString()));
-                                }
-
-                                final ArrayValue record = v.asArrayValue();
-                                if (record.size() != schema.size()) {
-                                    throw new InvalidRecordException(String.format(Locale.ENGLISH,
-                                            "The size (%d) of the record is invalid",
-                                            record.size()));
-                                }
-
-                                // write records to the page
-                                for (int i = 0; i < writers.length; i++) {
-                                    writers[i].write(record.get(i), pageBuilder);
-                                }
-
-                                pageBuilder.addRecord();
-                            } catch (InvalidRecordException e) {
-                                if (stopOnInvalidRecord) {
-                                    throw new DataException(String.format(Locale.ENGLISH,
-                                            "Invalid record (%s)", e.getMessage()), e);
-                                }
-                                log.warn(String.format(Locale.ENGLISH,
-                                        "Skipped record (%s)", e.getMessage()));
-                            }
+            // Phase 1: Download job result to a temporary file.
+            // This separates network I/O (where td-client-java retry is needed) from
+            // data processing (where retry would cause duplicate records).
+            // On retry, Files.copy with REPLACE_EXISTING overwrites partial data,
+            // preventing duplication. See: https://github.com/primenumber-dev/n-transfer-ui/issues/42731
+            Path tempFile = null;
+            try {
+                tempFile = Files.createTempFile("embulk-input-td.", ".msgpack.gz");
+                final Path tempFilePath = tempFile;
+                client.jobResult(jobId, resultFormat, new Function<InputStream, Void>() {
+                    @Override
+                    public Void apply(InputStream input) {
+                        try {
+                            Files.copy(input, tempFilePath, StandardCopyOption.REPLACE_EXISTING);
+                        } catch (IOException e) {
+                            throw Throwables.propagate(e);
                         }
-                    } catch (IOException e) {
-                        throw Throwables.propagate(e);
+                        return null;
                     }
+                });
 
-                    return null;
+                // Phase 2: Read from the local temporary file and write to PageBuilder.
+                // No network errors can occur here since we are reading from a local file.
+                try (final MessageUnpacker unpacker = MessagePack
+                        .newDefaultUnpacker(new GZIPInputStream(Files.newInputStream(tempFile)))) {
+                    while (unpacker.hasNext()) {
+                        try {
+                            final Value v;
+                            try {
+                                v = unpacker.unpackValue();
+                            } catch (IOException e) {
+                                throw new InvalidRecordException("Cannot unpack value", e);
+                            }
+
+                            if (!v.isArrayValue()) {
+                                throw new InvalidRecordException(
+                                        String.format(Locale.ENGLISH,
+                                                "Must be array value: (%s)", v.toString()));
+                            }
+
+                            final ArrayValue record = v.asArrayValue();
+                            if (record.size() != schema.size()) {
+                                throw new InvalidRecordException(String.format(Locale.ENGLISH,
+                                        "The size (%d) of the record is invalid",
+                                        record.size()));
+                            }
+
+                            // write records to the page
+                            for (int i = 0; i < writers.length; i++) {
+                                writers[i].write(record.get(i), pageBuilder);
+                            }
+
+                            pageBuilder.addRecord();
+                        } catch (InvalidRecordException e) {
+                            if (stopOnInvalidRecord) {
+                                throw new DataException(String.format(Locale.ENGLISH,
+                                        "Invalid record (%s)", e.getMessage()), e);
+                            }
+                            log.warn(String.format(Locale.ENGLISH,
+                                    "Skipped record (%s)", e.getMessage()));
+                        }
+                    }
                 }
-            });
+            } catch (IOException e) {
+                throw Throwables.propagate(e);
+            } finally {
+                if (tempFile != null) {
+                    try {
+                        Files.deleteIfExists(tempFile);
+                    } catch (IOException e) {
+                        log.warn("Failed to delete temporary file: " + tempFile, e);
+                    }
+                }
+            }
 
             pageBuilder.finish();
         }
