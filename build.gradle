@@ -15,14 +15,7 @@ repositories {
 }
 
 group = "trocco-io"
-version = {
-    def vd = versionDetails()
-    if (vd.commitDistance == 0 && vd.lastTag ==~ /^v?[0-9]+\.[0-9]+\.[0-9]+([.-][.a-zA-Z0-9-]+)?/) {
-        vd.lastTag.replaceFirst(/^v/, "")
-    } else {
-        "0.0.0.${vd.gitHash}"
-    }
-}()
+version = versionDetails().lastTag.replaceFirst(/^v/, "")
 description = "Loads records from Td."
 
 java {
