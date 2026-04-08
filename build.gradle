@@ -17,8 +17,13 @@ repositories {
 group = "trocco-io"
 version = {
     def vd = versionDetails()
-    if (vd.commitDistance == 0 && vd.lastTag ==~ /^v?[0-9]+\.[0-9]+\.[0-9]+([.-][.a-zA-Z0-9-]+)?/) {
-        vd.lastTag.replaceFirst(/^v/, "")
+    if (vd.lastTag ==~ /^v?[0-9]+\.[0-9]+\.[0-9]+([.-][.a-zA-Z0-9-]+)?/) {
+        def base = vd.lastTag.replaceFirst(/^v/, "")
+        if (vd.commitDistance == 0) {
+            base
+        } else {
+            "${base}.pre.${vd.commitDistance}.${vd.gitHash}"
+        }
     } else {
         "0.0.0.${vd.gitHash}"
     }
